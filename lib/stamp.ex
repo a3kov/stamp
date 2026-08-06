@@ -1,0 +1,358 @@
+defmodule Stamp do
+  @moduledoc """
+  Stamp is a fast and flexible Snowflake-flavored ID generator based on 8-byte
+  integers with optional encoding.
+  """
+  alias Stamp.Config
+
+  defguardp is_stamp(s) when is_binary(s) or (is_integer(s) and s >= 0)
+  use Stamp.Ecto
+
+  @type value :: non_neg_integer() | String.t()
+
+  @type t :: %__MODULE__{
+          partition: non_neg_integer() | nil,
+          time: non_neg_integer(),
+          node: non_neg_integer() | nil,
+          sequence: non_neg_integer()
+        }
+
+  defstruct partition: nil,
+            time: nil,
+            node: nil,
+            sequence: nil
+
+  @doc """
+  Converts the id to integer. Returns `{:ok, integer_id}` or `:error` if the
+  value can't be decoded.
+  """
+  @spec to_integer(value(), Config.t()) :: {:ok, non_neg_integer()} | :error
+  def to_integer(value, _) when is_integer(value) and value >= 0, do: {:ok, value}
+
+  def to_integer(value, %Config{codec: codec} = config) when is_binary(value) and codec != nil do
+    try do
+      maybe_remove_prefix!(value, config) |> codec.decode()
+    rescue
+      ArgumentError -> :error
+    end
+  end
+
+  def to_integer(_, _), do: :error
+
+  @doc """
+  Converts the id to integer. Returns the integer id or raises if the
+  value can't be decoded.
+
+  Arguments:
+    - `id` - stamp in integer or string form
+
+    - `config` - `Stamp.Config` structure containing parameters for
+      the stamp.
+  """
+  @spec to_integer!(value(), Config.t()) :: non_neg_integer() | :no_return
+  def to_integer!(id, _) when is_integer(id) and id >= 0, do: id
+
+  def to_integer!(id, %Config{codec: codec} = config) when is_binary(id) and codec != nil do
+    maybe_remove_prefix!(id, config) |> codec.decode!()
+  end
+
+  def to_integer!(_, _), do: raise(ArgumentError, "Invalid value")
+
+  defp maybe_remove_prefix!(string, %{prefix: nil}), do: string
+
+  defp maybe_remove_prefix!(string, %{prefix: prefix}) do
+    case string do
+      ^prefix <> value -> value
+      _ -> raise ArgumentError, "Invalid value"
+    end
+  end
+
+  defp maybe_encode_with_prefix(int, %Config{} = config) when is_integer(int) do
+    case config do
+      %{prefix: nil, codec: nil} ->
+        int
+
+      %{prefix: nil, codec: codec} ->
+        codec.encode(int)
+
+      %{prefix: prefix, codec: codec} ->
+        "#{prefix}#{codec.encode(int)}"
+    end
+  end
+
+  defp normalize!(id, %Config{codec: nil}) when is_integer(id) and id >= 0, do: id
+
+  defp normalize!(id, %Config{codec: codec} = config) when is_binary(id) and codec != nil do
+    maybe_remove_prefix!(id, config) |> codec.decode!()
+  end
+
+  defp normalize!(_, _), do: raise(ArgumentError, "Invalid value")
+
+  @doc """
+  Generates next id using provided sequence_id and configuration.
+  This function is for non-Ecto uses. For Ecto fields use `next_field_id/3`.
+
+  Arguments:
+    - `sequence_id` - unique term used to create sequence for the stamps.
+      Stamps using different `sequence_id` are supposed to be used in
+      separate contexts and can have intersecting values without causing
+      issues. Do not include config parameters in it - it's done automatically
+      by the library. Good examples: `:comment_id`, `{Comment, :id}`.
+
+    - `config` - `Stamp.Config` structure containing parameters for
+      generating the ID.
+
+    - `opts` - generation options.
+
+  Supported options:
+    - `time` - OS time in milliseconds, using unix epoch. When provided,
+      Stamp will try to use it for the generation instead of calling
+      `System.os_time/1`. The number must fit in `time_bits` without
+      overflow.
+
+    - `partition` - integer number of the partition that will be used instead
+      of calling `partition_fun/0` from the config, if the partitioning
+      is enabled. The number must fit in `partition_bits` without overflow.
+  """
+  @spec next_id(any(), Config.t(), Keyword.t()) :: value() | :no_return
+  def next_id(sequence_id, %Config{} = config, opts \\ []) do
+    partition = get_partition(config, opts)
+    node = get_node(config)
+    new_ts = get_time(config, opts)
+    pt_key = pt_key(sequence_id, node, partition)
+
+    case :persistent_term.get(pt_key, :new_sequence) do
+      :new_sequence ->
+        seq_ref = :atomics.new(1, [])
+        new_ts = get_time(config, opts)
+        :atomics.put(seq_ref, 1, pack_time_sequence(new_ts, 0, config))
+
+        try do
+          :persistent_term.put_new(pt_key, seq_ref)
+          pack_id(partition, new_ts, node, 0, config) |> maybe_encode_with_prefix(config)
+        rescue
+          ArgumentError -> next_id(sequence_id, config, opts)
+        end
+
+      ref ->
+        atomic = :atomics.get(ref, 1)
+        {prev_ts, prev_seq} = unpack_time_sequence(atomic, config)
+        increased_ts? = new_ts > prev_ts
+        last_seq? = prev_seq == 2 ** config.sequence_bits - 1
+        new_seq = if increased_ts? || last_seq?, do: 0, else: prev_seq + 1
+
+        new_ts =
+          cond do
+            increased_ts? ->
+              new_ts
+
+            last_seq? ->
+              :telemetry.execute(
+                [:stamp, :sequence, :overflow],
+                %{time: new_ts, last_time: prev_ts},
+                %{sequence_id: sequence_id, node: node, partition: partition}
+              )
+
+              prev_ts + 1
+
+            true ->
+              prev_ts
+          end
+
+        new_atomic = pack_time_sequence(new_ts, new_seq, config)
+
+        case :atomics.compare_exchange(ref, 1, atomic, new_atomic) do
+          :ok ->
+            pack_id(partition, new_ts, node, new_seq, config)
+            |> maybe_encode_with_prefix(config)
+
+          _ ->
+            next_id(sequence_id, config, opts)
+        end
+    end
+  end
+
+  defp get_time(%{time_bits: bits, epoch: epoch}, opts) do
+    compressed_ts =
+      (Keyword.get(opts, :time) || System.os_time(:millisecond)) - epoch
+
+    if compressed_ts < 0 do
+      raise ArgumentError, "Negative time after subtracting epoch"
+    end
+
+    ensure_integer_in_range!(compressed_ts, bits, "time")
+    compressed_ts
+  end
+
+  defp get_partition(%{partition_bits: bits, partition_fun: partition_fun}, opts) do
+    partition = Keyword.get(opts, :partition)
+
+    cond do
+      bits == 0 ->
+        if partition do
+          raise ArgumentError, "Partition option provided when partition_bits is 0"
+        end
+
+      partition ->
+        ensure_integer_in_range!(partition, bits, "Partition number")
+
+      true ->
+        ensure_integer_in_range!(partition_fun.(), bits, "Partition number")
+    end
+  end
+
+  defp get_node(%{node_bits: 0}), do: nil
+
+  defp get_node(%{node_bits: bits, node_fun: node_fun}) do
+    ensure_integer_in_range!(node_fun.(), bits, "Node number")
+  end
+
+  defp ensure_integer_in_range!(num, bits, desc) do
+    max_num = 2 ** bits - 1
+
+    if is_integer(num) and num >= 0 and num <= max_num do
+      num
+    else
+      raise ArgumentError, "#{desc} must be an integer in 0..#{max_num} range"
+    end
+  end
+
+  defp pt_key(sequence_id, nil, nil), do: {__MODULE__, sequence_id}
+  defp pt_key(sequence_id, node, nil), do: {__MODULE__, sequence_id, node}
+  defp pt_key(sequence_id, node, partition), do: {__MODULE__, sequence_id, node, partition}
+
+  defp pack_time_sequence(time, sequence, config) do
+    %{time_bits: ts_bits, sequence_bits: seq_bits} = config
+
+    <<sequence_atomic::signed-integer-size(64)>> =
+      <<
+        0::size(64 - ts_bits - seq_bits),
+        time::size(ts_bits),
+        sequence::size(seq_bits)
+      >>
+
+    sequence_atomic
+  end
+
+  defp unpack_time_sequence(atomic, config) do
+    %{time_bits: ts_bits, sequence_bits: seq_bits} = config
+
+    <<
+      0::size(64 - ^ts_bits - ^seq_bits),
+      prev_ts::size(^ts_bits),
+      prev_seq::size(^seq_bits)
+    >> = <<atomic::signed-integer-size(64)>>
+
+    {prev_ts, prev_seq}
+  end
+
+  defp pack_id(partition, time, node, sequence, config) do
+    %{time_bits: ts_bits, sequence_bits: seq_bits} = config
+
+    <<id::signed-integer-size(64)>> =
+      <<
+        0::size(1),
+        maybe_add_partition(partition, config)::bitstring,
+        time::size(ts_bits),
+        maybe_add_node(node, config)::bitstring,
+        sequence::size(seq_bits)
+      >>
+
+    id
+  end
+
+  defp maybe_add_partition(nil, _), do: <<>>
+
+  defp maybe_add_partition(value, %{partition_bits: bits}) do
+    <<value::size(bits)>>
+  end
+
+  defp maybe_add_node(_, %{node_bits: 0}), do: <<>>
+
+  defp maybe_add_node(value, %{node_bits: bits}) do
+    <<value::size(bits)>>
+  end
+
+  @doc """
+  Unpacks parameters stored in the id.
+  This function is for non-Ecto uses. For Ecto fields use `unpack/3`.
+  Raises `ArgumentError` on errors.
+
+  Arguments:
+    - `id` - stamp in integer or string form (strictly according to config)
+
+    - `config` - `Stamp.Config` structure containing parameters for the stamp.
+  """
+  @spec unpack(value(), Config.t()) :: Stamp.t() | :no_return
+  def unpack(id, %Config{} = config) when is_stamp(id) do
+    %{
+      partition_bits: p_bits,
+      time_bits: t_bits,
+      node_bits: n_bits,
+      sequence_bits: s_bits,
+      epoch: epoch
+    } = config
+
+    int = normalize!(id, config)
+
+    <<0::size(1), p::size(^p_bits), t::size(^t_bits), n::size(^n_bits), s::size(^s_bits)>> =
+      <<int::signed-integer-size(64)>>
+
+    p = (p_bits != 0 && p) || nil
+    n = (n_bits != 0 && n) || nil
+
+    %__MODULE__{partition: p, node: n, sequence: s, time: epoch + t}
+  end
+
+  @doc """
+  Returns partition stored in the id, or nil if the stamp is not partitioned.
+  This function is for non-Ecto uses. For Ecto fields use `partition/3`.
+  Raises `ArgumentError` on errors.
+
+  Arguments:
+    - `id` - stamp in integer or string form (strictly according to config)
+
+    - `config` - `Stamp.Config` structure containing parameters for the stamp.
+  """
+  @spec partition(value(), Config.t()) :: non_neg_integer() | nil
+  def partition(id, %Config{} = config) when is_stamp(id) do
+    int = normalize!(id, config)
+
+    case config do
+      %{partition_bits: 0} ->
+        nil
+
+      %{partition_bits: p_bits} ->
+        <<0::size(1), p::size(^p_bits), _::bitstring>> = <<int::signed-integer-size(64)>>
+        p
+    end
+  end
+
+  @doc """
+  Returns UTC DateTime stored in the id.
+  This function is for non-Ecto uses. For Ecto fields use `datetime/3`.
+  Raises `ArgumentError` on errors.
+
+  Arguments:
+    - `id` - stamp in integer or string form (strictly according to config)
+
+    - `config` - `Stamp.Config` structure containing parameters for the stamp.
+  """
+  @spec datetime(value(), Config.t()) :: DateTime.t()
+  def datetime(id, %Config{} = config) when is_stamp(id) do
+    %{time_bits: t_bits, epoch: epoch} = config
+    int = normalize!(id, config)
+    bin = <<int::signed-integer-size(64)>>
+
+    case config do
+      %{partition_bits: 0} ->
+        <<0::size(1), t::size(^t_bits), _::bitstring>> = bin
+        epoch + t
+
+      %{partition_bits: p_bits} ->
+        <<0::size(1), _::size(^p_bits), t::size(^t_bits), _::bitstring>> = bin
+        epoch + t
+    end
+    |> DateTime.from_unix!(:millisecond)
+  end
+end

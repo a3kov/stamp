@@ -1,0 +1,237 @@
+# Stamp
+
+Stamp is a fast and flexible Snowflake-flavored ID generator based on 8-byte
+integers with optional encoding.
+
+## Features
+
+<a href="https://github.com/a3kov/stamp/raw/main/assets/stamp_structure.jpg">
+  <img align="right" style="margin-left:16px;" width="300px" src="https://github.com/a3kov/stamp/raw/main/assets/stamp_structure.jpg">
+</a>
+
+ - works both with and without Ecto
+
+ - BlazingFast™ sequences on top of process-free atomic counters
+
+ - no global configuration - uses per-field configuration and runtime values
+
+ - user-configurable number of bits for every part of the ID
+
+ - some parts can be disabled, freeing up the bits for other parts
+
+ - optional encoding of the integers to string versions
+
+ - optional Stripe-style prefix to easily distinguish IDs of different models/schemas
+
+ - optional range-based partitioning and sharding (experimental)
+
+<div style="clear: both"></div><br>
+
+## Stamp vs Alternatives
+
+UUID fields have become more popular recently, but they are expensive for use in indexes and
+especially primary keys. UUIDv7 improves upon v4 and other versions in some ways, but the size
+hasn't changed. There are also exotic alternatives like KSUID and ULID, but they share some
+issues of UUID.
+
+The original Snowflake supported BigTech-scale numbers (e.g. 1024 workers each inserting up to 
+4,096,000 records per second). With BEAM favoring vertical (rather than horizontal) scaling and
+hardware getting more powerful every year it is reasonable to assume that we can leverage the bits in
+the ID more effectively than Twitter did back in 2010, especially if the application never reaches
+Twitter's scale.
+
+|                                             | Stamp               | Serial/Identity | UUID         |
+|---------------------------------------------|---------------------|-----------------|--------------|
+| generated in the application                | ✅️                  | ❌️              | ✅️           |
+| globally unique with distributed generation | ❌️                  | ❌️              | ✅️           |
+| compact in terms of storage and RAM         | ✅️                  | ✅️              | ❌️           |
+| composite PK/indexes without bloat          | ✅️                  | ✅️              | ❌️           |
+| looks good and is short both raw/encoded    | ✅️                  | ✅️              | ❌️           |
+| efficient BTree index operations            | ✅️                  | ✅️              | ✅️ in v7     |
+| may remove the need for extra time field    | ✅️                  | ❌️              | ✅️ in v7     |
+| bulk inserts                                | ✳️ sequence limits  | ✅️              | ✅️           |
+| range partitioning/sharding (not by time)   | ✅️                  | ❌️              | ❌️           |
+| keeps creation time secret                  | ❌️                  | ✳️ guessable    | ❌️ not in v7 |
+| keeps number of records secret              | ✅️                  | ❌️ barely       | ✅️           |
+| next id is unpredictable                    | ✳️ depends          | ❌️              | ✅️           |
+| easy to set up and use                      | ❓️ planning/setup   | ✅️              | ✅️           |
+
+## Installation
+
+The package can be installed by adding `stamp` to your list of dependencies in `mix.exs`:
+```elixir
+def deps do
+  [
+    {:stamp, "~> 0.1"}
+  ]
+end
+```
+
+## Usage
+
+Choosing a structure for your ID is a very important decision that can be hard or even
+impossible to undo later. The library provides good defaults tuned for “average project
+scale” rather than “Twitter scale”, but learning about the available configuration
+parameters is still encouraged.
+
+There are 2 important upfront decisions:
+
+ - Do you want to use partitioning and how many partitions you want ?
+
+ - How many bits you want to reserve for timestamps ?
+
+Both of these can't be reversed later without breaking existing identifiers. Everything else in
+the ID has no permanent meaning (unless you add one) and only serves as uniqueness source.
+
+If using Ecto, add the field as a primary/foreign key to schemas and migrations.
+```elixir
+defmodule Post do
+  use Ecto.Schema
+
+  @primary_key {:id, Stamp, [.., node_fun: &MyConf.node/0, autogenerate: true]}
+
+  schema "posts" do
+    has_many :comments, Comment
+  end
+end
+
+defmodule Comment do
+  use Ecto.Schema
+
+  @primary_key {:id, Stamp, [.., node_fun: &MyConf.node/0, autogenerate: true]}
+  @foreign_key_type Stamp
+
+  schema "comments" do
+    belongs_to :post, Post
+  end
+end
+
+# In a migration:
+
+defmodule CreatePostsComments do
+  use Ecto.Migration
+
+  def change do
+    create table(:posts, primary_key: [type: :bigint]) do
+      ...
+    end
+
+    create table(:comments, primary_key: [type: :bigint]) do
+      add :post_id, references(:posts, on_delete: :delete_all), null: false
+    end
+  end
+end
+
+# or add to all migrations as default if you want to go all-in:
+config :myproject, MyProject.Repo,
+  migration_primary_key: [type: :bigint]
+```
+
+For description of every Stamp parameter see `Stamp.Config.new/1`
+
+To generate stamps without Ecto simply use `Stamp.next_id/3`:
+```elixir
+config = Stamp.Config.new(node_fun: &MyConf.node/0)
+id = Stamp.next_id(:some_id, config)
+```
+
+## Important details and caveats
+
+There are edge cases that must be understood:
+
+ - If OS time is corrected backwards, the last used timestamp is now officially "the future".
+   Stamp will keep using the last timestamp while consuming the same sequence until it overflows,
+   or until the current time advances past the last used timestamp.
+
+ - When the sequence overflows and time has not advanced past the last used timestamp, Stamp will
+   increment the timestamp by 1, even if that means going into the future (this is another case of
+   "the future").
+
+ - While “in the future”, Stamp will keep consuming sequences and will advance to the next
+   timestamp only on overflow - this can happen multiple times. We can think of it as “ID 
+   generation driving the time”, but essentially it is slowing down Stamp’s internal time and
+   letting the OS time catch up.
+
+In other words, the time is monotonic within a single node and does not strictly reflect
+OS time (which is not monotonic). An NTP daemon (ntpd) must be installed on every server where
+the application is deployed to make the generated timestamps more accurate and consistent across
+all nodes. Time corrections (including backward ones) are inevitable, but we must keep their 
+magnitude manageable so that the timestamps still roughly reflect real time.
+
+Sequence bits must be sufficient for the generation volume (you can either increase the bits or
+reduce the volume) if you want to avoid advancing the time too far into the future.
+Generation of millions of IDs with exactly the same timestamp may not always be possible.
+
+A sequence is uniquely identified by the combination of sequence_id, node number, and partition
+number. If generation is evenly distributed across partitions, reallocating bits from the sequence
+to the partition does not reduce the sustainable generation rate (if it wasn’t already obvious).
+
+Stamp has [Telemetry](https://telemetry.hexdocs.pm/readme.html) integration for monitoring of
+sequence overflows. In this context there are "normal" overflows (after OS time correction), 
+"bad" overflows (a sequence can't keep up with normal volume) or a combination of the two.
+
+```elixir
+def handle_event([:stamp, :sequence, :overflow], measurements, metadata, _) do
+  %{time: time, last_time: last_time} = measurements
+  # Metadata describes specific sequence.
+  %{sequence_id: sequence_id, node: node, partition: partition} = metadata
+end
+```
+
+`time` is the time that Stamp attempted to use initially for the current generation. `last_time`
+is the time that was used to generate the previous id. Both of these are "compressed" versions
+(after subtracting epoch). You can compare them to roughly understand what's going on, log the
+events, build metrics on top, etc. For Ecto fields `sequence_id` is a `{schema, field}` tuple.
+
+## Partitioning and sharding
+
+If a table grows too large, one can split it into parts for more efficient processing, either on
+the same server (partitioning) or across different servers (sharding). There are many ways to do
+this, but one that is universally applicable to non-historical data is hash-based partitioning.
+
+Let’s say you have a multi-tenant app without DB-level isolation of tenants, and you want to
+partition tenant data by the hash of tenant_id. For this to work, the partition key must be part
+of every unique index. That means you would need to include tenant_id in all primary keys of the
+partitioned tables, and composite primary keys have poor support in Ecto - they work with some
+features but not with others.
+
+This library offers another way: we can put partition number in the highest bits of the id, which will
+result in splitting the keyspace in equal parts (partitions). This allows us to keep using non-composite
+primary keys while enjoing the benefits of partitioning. Using consistent hashing of the tenant_id we
+can achieve both resource colocation and even distribution of tenants across partitions (the actual
+resource distribution will depend on how uniform the tenants are). And our indexes are much smaller
+this way.
+
+Sharding in this context is not a separate feature - it's simply a byproduct of partitioning. If you
+have split the tables in parts, and every part is known to have dedicated range of IDs, you can have a
+software (usually a connection pooler with sharding support) to route the requests between servers
+based on the id. Or you could do it explicitly in the application.
+
+But there are also downsides compared to the “partition key in composite PK” option. The database
+may not always know where to look for a specific row. This can force it to scan all partitions,
+which is expensive (the more partitions, the more expensive). If you have a resource whose
+resource.id is range-partitioned by the hash of tenant_id, and you are selecting resources of a
+specific tenant, the database doesn’t know which partitions to look in. The good news is that we
+can help the database by explicitly adding the range to the WHERE clause, e.g.
+`WHERE resource.id BETWEEN A AND B`. This process of removing irrelevant partitions from the query
+plan is called *partition pruning* in Postgres.
+
+If you expect your table to grow very big (tens or even hundreds of millions of rows), it may make sense
+to enable partitions in Stamp, even if you are not partitioning the table from the start.
+This way later you will be able to partition it with some downtime but without changing the IDs.
+
+The biggest difference after enabling partitioning is that the IDs are not globally k-sorted. They
+are only k-sorted within a single partition.
+
+## Benchmarks
+
+The library includes a simple benchmark measuring generation of stamps. On a single core even with
+encoding enabled you can generate ~ million stamps per second. The exact numbers will depend on the
+CPU and other factors, but the main conclusion is you won't reach id generation bottleneck with
+this library (computation-wise).
+
+## License
+
+Copyright 2026 Andrey Tretyakov
+The source code of the project is released under Apache License 2.0.
+Check LICENSE file for more information.
