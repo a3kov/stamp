@@ -96,7 +96,7 @@ defmodule Stamp.Config do
     sequence_bits =
       Keyword.get(opts, :sequence_bits, @default_sequence_bits) |> ensure_pos("sequence_bits")
 
-    epoch = Keyword.get(opts, :epoch, @default_epoch) |> ensure_non_neg("epoch")
+    epoch = Keyword.get(opts, :epoch, @default_epoch) |> ensure_pos("epoch")
 
     if partition_bits + time_bits + node_bits + sequence_bits != @distribute_bits do
       raise ArgumentError, "Sum of all bit parameters must be #{@distribute_bits}"
