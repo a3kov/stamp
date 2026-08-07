@@ -12,7 +12,7 @@ defmodule Stamp.Config do
 
   @type t :: %__MODULE__{
           partition_bits: non_neg_integer(),
-          time_bits: non_neg_integer(),
+          time_bits: pos_integer(),
           node_bits: non_neg_integer(),
           sequence_bits: pos_integer(),
           partition_fun: fun() | nil,
