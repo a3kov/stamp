@@ -3,6 +3,12 @@
 Stamp is a fast and flexible Snowflake-flavored ID generator based on 8-byte
 integers with optional encoding.
 
+[The original Snowflake](https://blog.x.com/engineering/en_us/a/2010/announcing-snowflake) supported
+BigTech-scale numbers (e.g. 1024 workers each inserting up to 4,096,000 records per second). With
+BEAM favoring vertical (rather than horizontal) scaling and hardware getting more powerful every year
+it is reasonable to assume that we can leverage the bits in the ID more effectively than Twitter did
+back in 2010, especially if the application never reaches Twitter's scale.
+
 ## Features
 
 <a href="https://github.com/a3kov/stamp/raw/main/assets/stamp_structure.jpg">
@@ -27,6 +33,18 @@ integers with optional encoding.
 
 <div style="clear: both"></div><br>
 
+## How stamps look
+
+| Type                                    | Stamp                  |
+|-----------------------------------------|------------------------|
+| Raw, no partitioning                    | `5406450851512320`     |
+| Base62                                  | `"Ol6XKJ8oy"`          |
+| Base62 + prefix                         | `"u_Ol6XKJ8oy"`        |
+| Integer codec (always a string)         | `"5406450851512320"`   |
+| Integer + prefix                        | `"u_5406450851512320"` |
+| Raw, 256 partitions, p255 (worst case)  | `9187364417633648640`  |
+| 256 partitions, p255, Base62            | `"AwgE2gA8mq8"`        | 
+
 ## Stamp vs Alternatives
 
 UUID fields have become more popular recently, but they are expensive for use in indexes and
@@ -34,27 +52,44 @@ especially primary keys. UUIDv7 improves upon v4 and other versions in some ways
 hasn't changed. There are also exotic alternatives like KSUID and ULID, but they share some
 issues of UUID.
 
-The original Snowflake supported BigTech-scale numbers (e.g. 1024 workers each inserting up to 
-4,096,000 records per second). With BEAM favoring vertical (rather than horizontal) scaling and
-hardware getting more powerful every year it is reasonable to assume that we can leverage the bits in
-the ID more effectively than Twitter did back in 2010, especially if the application never reaches
-Twitter's scale.
+|                                             | Stamp                  | Serial/Identity  | UUID         |
+|---------------------------------------------|------------------------|------------------|--------------|
+| generated in the application                | ✅️                     | ❌️               | ✅️           |
+| globally unique with distributed generation | ❌️                     | ❌️               | ✅️           |
+| compact in terms of storage and RAM         | ✅️                     | ✅️               | ❌️           |
+| composite PK/indexes without bloat          | ✅️                     | ✅️               | ❌️           |
+| looks good and is short both raw/encoded    | ✅️                     | ✅️               | ❌️           |
+| efficient BTree index operations            | ✅️                     | ✅️               | ✅️ in v7     |
+| may remove the need for extra time field    | ✅️                     | ❌️               | ✅️ in v7     |
+| bulk inserts                                | ✳️ sequence nuances[1] | ✅️               | ✅️           |
+| range partitioning/sharding (not by time)   | ✅️                     | ❌️               | ❌️           |
+| keeps creation time secret                  | ❌️                     | ✳️ guessable[2]  | ❌️ not in v7 |
+| keeps number of records secret              | ✅️                     | ❌️ barely[3]     | ✅️           |
+| next id is unpredictable                    | ✳️ depends[4]          | ❌️               | ✅️           |
+| easy to set up and use                      | ❓️ planning, setup[5]  | ✅️               | ✅️           |
 
-|                                             | Stamp               | Serial/Identity | UUID         |
-|---------------------------------------------|---------------------|-----------------|--------------|
-| generated in the application                | ✅️                  | ❌️              | ✅️           |
-| globally unique with distributed generation | ❌️                  | ❌️              | ✅️           |
-| compact in terms of storage and RAM         | ✅️                  | ✅️              | ❌️           |
-| composite PK/indexes without bloat          | ✅️                  | ✅️              | ❌️           |
-| looks good and is short both raw/encoded    | ✅️                  | ✅️              | ❌️           |
-| efficient BTree index operations            | ✅️                  | ✅️              | ✅️ in v7     |
-| may remove the need for extra time field    | ✅️                  | ❌️              | ✅️ in v7     |
-| bulk inserts                                | ✳️ sequence limits  | ✅️              | ✅️           |
-| range partitioning/sharding (not by time)   | ✅️                  | ❌️              | ❌️           |
-| keeps creation time secret                  | ❌️                  | ✳️ guessable    | ❌️ not in v7 |
-| keeps number of records secret              | ✅️                  | ❌️ barely       | ✅️           |
-| next id is unpredictable                    | ✳️ depends          | ❌️              | ✅️           |
-| easy to set up and use                      | ❓️ planning/setup   | ✅️              | ✅️           |
+[1] If an insert overflows the sequence, time goes into the future. This does not limit the insertion,
+    but forces timestamp accuracy trade-offs. In the worst case scenario you can have more accurate
+    version of creation time in a separate field. See *Important details and caveats* below for more info.
+
+[2] Because there is only 1 sequence correlated with creation, one could roughly estimate the
+    creation time of a record by comparing the number with other records, where the time may
+    be known.
+
+[3] Under normal conditions 1 used sequence number corresponds to 1 record. If we can observe
+    sequence growth, we can estimate or even know precisely how many records are created in a
+    period of time.
+    With total number of records it's a bit different. Some applications set initial sequence
+    number high to help with the issue, but it's only a half measure. If it's possible to observe
+    random ids inside the application, one can notice the gap and guess that it's empty.
+
+[4] Stamp is monotonic for a combination of partition, node, sequence id. If you can generate
+    ids for this combination, you can predict next id. Stamp is definitely not as good as
+    UUID in this regard.
+
+[5] The library provides good defaults tuned for “average project scale” rather than “Twitter
+    scale”, but learning about the available configuration parameters to get the most benefits
+    is still encouraged.
 
 ## Installation
 
@@ -69,12 +104,8 @@ end
 
 ## Usage
 
-Choosing a structure for your ID is a very important decision that can be hard or even
-impossible to undo later. The library provides good defaults tuned for “average project
-scale” rather than “Twitter scale”, but learning about the available configuration
-parameters is still encouraged.
-
-There are 2 important upfront decisions:
+Choosing a structure for your ID is an important decision that can be hard or even
+impossible to undo later. There are 2 upfront decisions:
 
  - Do you want to use partitioning and how many partitions you want ?
 
@@ -84,6 +115,8 @@ Both of these can't be reversed later without breaking existing identifiers. Eve
 the ID has no permanent meaning (unless you add one) and only serves as uniqueness source.
 
 If using Ecto, add the field as a primary/foreign key to schemas and migrations.
+Field params must contain `node_fun` - a function returning node number.
+
 ```elixir
 defmodule Post do
   use Ecto.Schema
