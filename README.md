@@ -105,12 +105,14 @@ end
 
 ## Usage
 
-Choosing a structure for your ID is an important decision that can be hard or even
-impossible to undo later. There are 2 upfront decisions:
+Stamp structure, once chosen, can be hard or even impossible to change later. There are 2
+upfront decisions:
 
- - Do you want to use partitioning and how many partitions you want ?
+ - Do you want to use partitioning and how many partitions you want ? By default it's
+   disabled.
 
- - How many bits you want to reserve for timestamps ?
+ - How many bits you want to reserve for timestamps ? Default is 41 (like in Snowflake) which
+   is enough to store time for ~70 years.
 
 Both of these can't be reversed later without breaking existing identifiers. Everything else in
 the ID has no permanent meaning (unless you add one) and only serves as uniqueness source.
