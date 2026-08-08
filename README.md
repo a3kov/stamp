@@ -86,7 +86,7 @@ issues of UUID.
 [4] Stamp is monotonic for a combination of partition, node number, sequence id. If you can
     generate ids for this combination, you can predict next id. Some randomness can be added
     by randomly picking from a pool of node numbers on each generation. In general, Stamp is
-    definitely not as good as UUID in this regard simply because of size.
+    definitely not as good as UUID in this regard simply because of the size difference.
 
 [5] The library provides good defaults tuned for “average project scale” rather than “Twitter
     scale”, but learning about the available configuration parameters to get the most benefits
