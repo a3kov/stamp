@@ -266,7 +266,7 @@ resource.id is range-partitioned by the hash of tenant_id, and you are selecting
 specific tenant, the database doesn’t know which partitions to look in. The good news is that we
 can help the database by explicitly adding the range to the WHERE clause, e.g.
 `WHERE resource.id BETWEEN A AND B`. This process of removing irrelevant partitions from the query
-plan is called *partition pruning* in Postgres.
+plan is called *partition pruning*.
 
 If you expect your table to grow very big (tens or even hundreds of millions of rows), it may make sense
 to enable partitions in Stamp, even if you are not partitioning the table from the start.
