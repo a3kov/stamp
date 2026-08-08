@@ -115,8 +115,21 @@ impossible to undo later. There are 2 upfront decisions:
 Both of these can't be reversed later without breaking existing identifiers. Everything else in
 the ID has no permanent meaning (unless you add one) and only serves as uniqueness source.
 
-If using Ecto, add the field as a primary/foreign key to schemas and migrations.
-Field params must contain `node_fun` - a function returning node number.
+A minimal Stamp configuration starts with node function - a function returning node
+number.
+```elixir
+defmodule MyConf do
+  def node() do
+    # A non-negative integer fitting in node_bits (7 by default), as long as
+    # it's unique across all BEAM nodes (and other applications generating 
+    # same ids, if you have any). We put a literal here for simplicity, but it's
+    # a runtime setting so it must not be compiled-in.
+    0
+  end
+end
+```
+
+If using Ecto, add Stamp as a primary/foreign key to schemas.
 
 ```elixir
 defmodule Post do
@@ -139,9 +152,10 @@ defmodule Comment do
     belongs_to :post, Post
   end
 end
+```
 
-# In a migration:
-
+Then to migrations.
+```elixir
 defmodule CreatePostsComments do
   use Ecto.Migration
 
@@ -155,15 +169,17 @@ defmodule CreatePostsComments do
     end
   end
 end
+```
 
-# or add to all migrations as default if you want to go all-in:
+Or add to all migrations as the default if you want to go all-in.
+```elixir
 config :myproject, MyProject.Repo,
   migration_primary_key: [type: :bigint]
 ```
 
-For description of every Stamp parameter see `Stamp.Config.new/1`
+For description of every Stamp parameter see `Stamp.Config.new/1`.
 
-To generate stamps without Ecto simply use `Stamp.next_id/3`:
+To generate stamps outside Ecto use `Stamp.next_id/3`.
 ```elixir
 config = Stamp.Config.new(node_fun: &MyConf.node/0)
 id = Stamp.next_id(:some_id, config)
