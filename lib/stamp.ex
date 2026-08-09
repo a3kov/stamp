@@ -180,8 +180,7 @@ defmodule Stamp do
       raise ArgumentError, "Negative time after subtracting epoch"
     end
 
-    ensure_integer_in_range!(compressed_ts, bits, "time")
-    compressed_ts
+    validate_in_range!(compressed_ts, bits, "time")
   end
 
   defp get_partition(%{partition_bits: bits, partition_fun: partition_fun}, opts) do
@@ -194,20 +193,20 @@ defmodule Stamp do
         end
 
       partition ->
-        ensure_integer_in_range!(partition, bits, "Partition number")
+        validate_in_range!(partition, bits, "Partition number")
 
       true ->
-        ensure_integer_in_range!(partition_fun.(), bits, "Partition number")
+        validate_in_range!(partition_fun.(), bits, "Partition number")
     end
   end
 
   defp get_node(%{node_bits: 0}), do: nil
 
   defp get_node(%{node_bits: bits, node_fun: node_fun}) do
-    ensure_integer_in_range!(node_fun.(), bits, "Node number")
+    validate_in_range!(node_fun.(), bits, "Node number")
   end
 
-  defp ensure_integer_in_range!(num, bits, desc) do
+  defp validate_in_range!(num, bits, desc) do
     max_num = 2 ** bits - 1
 
     if is_integer(num) and num >= 0 and num <= max_num do
