@@ -197,7 +197,10 @@ defmodule Stamp.StampTest do
           partition_fun: &get_partition/0
         )
 
-      assert_raise ArgumentError, fn -> Stamp.next_id(uniq_seq(), config) end
+      assert_raise ArgumentError, ~r"Partition number must be an integer in 0..", fn ->
+        Stamp.next_id(uniq_seq(), config)
+      end
+
       delete_partition()
     end
 
@@ -212,7 +215,10 @@ defmodule Stamp.StampTest do
           partition_fun: &get_partition/0
         )
 
-      assert_raise ArgumentError, fn -> Stamp.next_id(uniq_seq(), config, partition: 11) end
+      assert_raise ArgumentError, ~r"Partition number must be an integer in 0..", fn ->
+        Stamp.next_id(uniq_seq(), config, partition: 11)
+      end
+
       delete_partition()
     end
 
