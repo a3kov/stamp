@@ -43,8 +43,14 @@ defmodule Stamp.StampConfigTest do
       assert_raise ArgumentError, ~r"^partition_bits must be > 0", fn ->
         Config.new(partition_fun: &get_partition/0, node_fun: &node_num/0)
       end
+
       assert_raise ArgumentError, ~r"^partition_bits must be a non-negative integer", fn ->
-        Config.new(partition_bits: -1, node_bits: 8, partition_fun: &get_partition/0, node_fun: &node_num/0)
+        Config.new(
+          partition_bits: -1,
+          node_bits: 8,
+          partition_fun: &get_partition/0,
+          node_fun: &node_num/0
+        )
       end
     end
 
@@ -58,6 +64,7 @@ defmodule Stamp.StampConfigTest do
       assert_raise ArgumentError, "node_bits must be > 0 when node_fun is provided", fn ->
         Config.new(node_bits: 0, time_bits: 48, node_fun: &node_num/0)
       end
+
       assert_raise ArgumentError, ~r"^node_bits must be a non-negative integer", fn ->
         Config.new(node_bits: -1, time_bits: 49, node_fun: &node_num/0)
       end
@@ -67,6 +74,7 @@ defmodule Stamp.StampConfigTest do
       assert_raise ArgumentError, ~r"^time_bits must be a positive integer", fn ->
         Config.new(time_bits: 0, node_fun: &node_num/0)
       end
+
       assert_raise ArgumentError, ~r"^time_bits must be a positive integer", fn ->
         Config.new(time_bits: -1, node_bits: 8, node_fun: &node_num/0)
       end
@@ -74,6 +82,7 @@ defmodule Stamp.StampConfigTest do
       assert_raise ArgumentError, ~r"^sequence_bits must be a positive integer", fn ->
         Config.new(sequence_bits: 0, node_fun: &node_num/0)
       end
+
       assert_raise ArgumentError, ~r"^sequence_bits must be a positive integer", fn ->
         Config.new(sequence_bits: -1, node_bits: 8, node_fun: &node_num/0)
       end
@@ -98,6 +107,7 @@ defmodule Stamp.StampConfigTest do
       assert_raise ArgumentError, ~r"^epoch must be a positive integer", fn ->
         Config.new(epoch: 0, node_fun: &node_num/0)
       end
+
       assert_raise ArgumentError, ~r"^epoch must be a positive integer", fn ->
         Config.new(epoch: -1, node_fun: &node_num/0)
       end
@@ -116,15 +126,23 @@ defmodule Stamp.StampConfigTest do
     end
 
     test "raises with invalid codec" do
-      assert_raise ArgumentError, "codec must be a module implementing Stamp.Codec behaviour", fn ->
-        Config.new(codec: "codec", node_fun: &node_num/0)
-      end
-      assert_raise ArgumentError, "codec must be a module implementing Stamp.Codec behaviour", fn ->
-        Config.new(codec: Stamp.Codec, node_fun: &node_num/0)
-      end
-      assert_raise ArgumentError, "could not load module :nonexisting due to reason :nofile", fn ->
-        Config.new(codec: :nonexisting, node_fun: &node_num/0)
-      end
+      assert_raise ArgumentError,
+                   "codec must be a module implementing Stamp.Codec behaviour",
+                   fn ->
+                     Config.new(codec: "codec", node_fun: &node_num/0)
+                   end
+
+      assert_raise ArgumentError,
+                   "codec must be a module implementing Stamp.Codec behaviour",
+                   fn ->
+                     Config.new(codec: Stamp.Codec, node_fun: &node_num/0)
+                   end
+
+      assert_raise ArgumentError,
+                   "could not load module :nonexisting due to reason :nofile",
+                   fn ->
+                     Config.new(codec: :nonexisting, node_fun: &node_num/0)
+                   end
     end
   end
 end
