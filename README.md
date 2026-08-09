@@ -69,28 +69,28 @@ issues of UUID.
 | easy to set up and use                      | ❓️ planning, setup[5]  | ✅️               | ✅️           |
 
 [1] If an insert overflows the sequence, time goes into the future. This does not limit the insertion,
-    but forces timestamp accuracy trade-offs. In the worst case scenario you can have more accurate
-    version of creation time in a separate field. See *Important details and caveats* below for more info.
+but forces timestamp accuracy trade-offs. In the worst case scenario you can have more accurate
+version of creation time in a separate field. See *Important details and caveats* below for more info.
 
 [2] Because there is only 1 sequence correlated with creation, one could roughly estimate the
-    creation time of a record by comparing the number with other records, where the time may
-    be known.
+creation time of a record by comparing the number with other records, where the time may
+be known.
 
 [3] Under normal conditions 1 used sequence number corresponds to 1 record. If we can observe
-    sequence growth, we can estimate or even know precisely how many records are created in a
-    period of time.
-    With total number of records it's a bit different. Some applications set initial sequence
-    number high to help with the issue, but it's only a half measure. If it's possible to observe
-    random ids inside the application, one can notice the gap and guess that it's empty.
+sequence growth, we can estimate or even know precisely how many records are created in a
+period of time.
+With total number of records it's a bit different. Some applications set initial sequence
+number high to help with the issue, but it's only a half measure. If it's possible to observe
+random ids inside the application, one can notice the gap and guess that it's empty.
 
 [4] Stamp is monotonic for a combination of partition, node number, sequence id. If you can
-    generate ids for this combination, you can predict next id. Some randomness can be added
-    by randomly picking from a pool of node numbers on each generation. In general, Stamp is
-    definitely not as good as UUID in this regard simply because of the size difference.
+generate ids for this combination, you can predict next id. Some randomness can be added
+by randomly picking from a pool of node numbers on each generation. In general, Stamp is
+definitely not as good as UUID in this regard simply because of the size difference.
 
 [5] The library provides good defaults tuned for “average project scale” rather than “Twitter
-    scale”, but learning about the available configuration parameters to get the most benefits
-    is still encouraged.
+scale”, but learning about the available configuration parameters to get the most benefits
+is still encouraged.
 
 ## Installation
 
