@@ -108,8 +108,8 @@ end
 Stamp structure, once chosen, can be hard or even impossible to change later. There are 2
 upfront decisions:
 
- - Do you want to use partitioning and how many partitions you want ? By default it's
-   disabled.
+ - Do you want to use partitioning and/or sharding and how many partitions/shards you want ?
+   By default it's disabled.
 
  - How many bits you want to reserve for timestamps ? Default is 41 (like in Snowflake) which
    is enough to store time for ~70 years.
@@ -254,11 +254,6 @@ can achieve both resource colocation and even distribution of tenants across par
 resource distribution will depend on how uniform the tenants are). And our indexes are much smaller
 this way.
 
-Sharding in this context is not a separate feature - it's simply a byproduct of partitioning. If you
-have split the tables in parts, and every part is known to have dedicated range of IDs, you can have a
-software (usually a connection pooler with sharding support) to route the requests between servers
-based on the id. Or you could do it explicitly in the application.
-
 But there are also downsides compared to the “partition key in composite PK” option. The database
 may not always know where to look for a specific row. This can force it to scan all partitions,
 which is expensive (the more partitions, the more expensive). If you have a resource whose
@@ -272,8 +267,14 @@ If you expect your table to grow very big (tens or even hundreds of millions of 
 to enable partitions in Stamp, even if you are not partitioning the table from the start.
 This way later you will be able to partition it with some downtime but without changing the IDs.
 
-The biggest difference after enabling partitioning is that the IDs are not globally k-sorted. They
-are only k-sorted within a single partition.
+The biggest difference after enabling stamp partitioning is that the IDs are not globally k-sorted.
+They are only k-sorted within a single partition.
+
+Sharding in this context is not a separate feature - it's simply a byproduct of partitioning. If you
+have split the tables in parts, and every part is known to have dedicated range of IDs, you can also
+distribute partitions between multiple servers. It can be useful to think of Stamp's partition
+number as a logical shard. The exact mapping of shards to the physical locations of records can be
+decided separately.
 
 ## Benchmarks
 
