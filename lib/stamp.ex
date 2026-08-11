@@ -3,6 +3,7 @@ defmodule Stamp do
   Stamp is a fast and flexible Snowflake-flavored ID generator based on 8-byte
   integers with optional encoding.
   """
+  import Bitwise
   alias Stamp.Config
 
   defguardp is_stamp(s) when is_binary(s) or (is_integer(s) and s >= 0)
@@ -220,56 +221,34 @@ defmodule Stamp do
   defp pt_key(sequence_id, node, nil), do: {__MODULE__, sequence_id, node}
   defp pt_key(sequence_id, node, partition), do: {__MODULE__, sequence_id, node, partition}
 
-  defp pack_time_sequence(time, sequence, config) do
-    %{time_bits: ts_bits, sequence_bits: seq_bits} = config
-
-    <<sequence_atomic::signed-integer-size(64)>> =
-      <<
-        0::size(64 - ts_bits - seq_bits),
-        time::size(ts_bits),
-        sequence::size(seq_bits)
-      >>
-
-    sequence_atomic
+  defp pack_time_sequence(time, sequence, %{sequence_bits: seq_bits}) do
+    time <<< seq_bits ||| sequence
   end
 
-  defp unpack_time_sequence(atomic, config) do
-    %{time_bits: ts_bits, sequence_bits: seq_bits} = config
-
-    <<
-      0::size(64 - ^ts_bits - ^seq_bits),
-      prev_ts::size(^ts_bits),
-      prev_seq::size(^seq_bits)
-    >> = <<atomic::signed-integer-size(64)>>
-
-    {prev_ts, prev_seq}
+  defp unpack_time_sequence(atomic, %{sequence_bits: seq_bits}) do
+    {atomic >>> seq_bits, atomic &&& (1 <<< seq_bits) - 1}
   end
 
   defp pack_id(partition, time, node, sequence, config) do
-    %{time_bits: ts_bits, sequence_bits: seq_bits} = config
+    %{node_bits: n_bits, sequence_bits: seq_bits} = config
 
-    <<id::signed-integer-size(64)>> =
-      <<
-        0::size(1),
-        maybe_add_partition(partition, config)::bitstring,
-        time::size(ts_bits),
-        maybe_add_node(node, config)::bitstring,
-        sequence::size(seq_bits)
-      >>
-
-    id
+    maybe_add_partition(partition, config) |||
+      time <<< (n_bits + seq_bits) |||
+      maybe_add_node(node, config) |||
+      sequence
   end
 
-  defp maybe_add_partition(nil, _), do: <<>>
+  defp maybe_add_partition(nil, _), do: 0
 
-  defp maybe_add_partition(value, %{partition_bits: bits}) do
-    <<value::size(bits)>>
+  defp maybe_add_partition(value, config) do
+    %{time_bits: t_bits, node_bits: n_bits, sequence_bits: seq_bits} = config
+    value <<< (t_bits + n_bits + seq_bits)
   end
 
-  defp maybe_add_node(_, %{node_bits: 0}), do: <<>>
+  defp maybe_add_node(_, %{node_bits: 0}), do: 0
 
-  defp maybe_add_node(value, %{node_bits: bits}) do
-    <<value::size(bits)>>
+  defp maybe_add_node(value, %{sequence_bits: seq_bits}) do
+    value <<< seq_bits
   end
 
   @doc """
@@ -293,14 +272,15 @@ defmodule Stamp do
     } = config
 
     int = normalize!(id, config)
+    partition = if p_bits != 0, do: int >>> (t_bits + n_bits + s_bits)
+    node = if n_bits != 0, do: int >>> s_bits &&& (1 <<< n_bits) - 1
 
-    <<0::size(1), p::size(^p_bits), t::size(^t_bits), n::size(^n_bits), s::size(^s_bits)>> =
-      <<int::signed-integer-size(64)>>
-
-    p = (p_bits != 0 && p) || nil
-    n = (n_bits != 0 && n) || nil
-
-    %__MODULE__{partition: p, node: n, sequence: s, time: epoch + t}
+    %__MODULE__{
+      partition: partition,
+      node: node,
+      sequence: int &&& (1 <<< s_bits) - 1,
+      time: epoch + (int >>> (n_bits + s_bits) &&& (1 <<< t_bits) - 1)
+    }
   end
 
   @doc """
@@ -321,9 +301,8 @@ defmodule Stamp do
       %{partition_bits: 0} ->
         nil
 
-      %{partition_bits: p_bits} ->
-        <<0::size(1), p::size(^p_bits), _::bitstring>> = <<int::signed-integer-size(64)>>
-        p
+      %{time_bits: t_bits, node_bits: n_bits, sequence_bits: s_bits} ->
+        int >>> (t_bits + n_bits + s_bits)
     end
   end
 
@@ -339,19 +318,10 @@ defmodule Stamp do
   """
   @spec datetime(value(), Config.t()) :: DateTime.t()
   def datetime(id, %Config{} = config) when is_stamp(id) do
-    %{time_bits: t_bits, epoch: epoch} = config
+    %{time_bits: t_bits, node_bits: n_bits, sequence_bits: s_bits, epoch: epoch} = config
     int = normalize!(id, config)
-    bin = <<int::signed-integer-size(64)>>
 
-    case config do
-      %{partition_bits: 0} ->
-        <<0::size(1), t::size(^t_bits), _::bitstring>> = bin
-        epoch + t
-
-      %{partition_bits: p_bits} ->
-        <<0::size(1), _::size(^p_bits), t::size(^t_bits), _::bitstring>> = bin
-        epoch + t
-    end
+    (epoch + (int >>> (n_bits + s_bits) &&& (1 <<< t_bits) - 1))
     |> DateTime.from_unix!(:millisecond)
   end
 end

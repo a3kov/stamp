@@ -279,9 +279,9 @@ decided separately.
 ## Benchmarks
 
 The library includes a simple benchmark measuring generation of stamps. On a single core even with
-encoding enabled you can generate ~ million stamps per second. The exact numbers will depend on the
-CPU and other factors, but the main conclusion is you won't reach id generation bottleneck with
-this library (computation-wise).
+encoding enabled you can generate more than 2 million stamps per second. The exact numbers will 
+depend on the CPU and other factors, but the main conclusion is you won't reach id generation
+bottleneck with this library (computation-wise).
 
 ## License
 

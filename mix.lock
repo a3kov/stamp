@@ -1,5 +1,5 @@
 %{
-  "based_integers": {:hex, :based_integers, "0.1.0", "19fb13b8624acd97f231126e2ecbdd73861dae7c608be41fde2725a5b9fcbb54", [:mix], [], "hexpm", "24b56d715e461c0ab030ad30ad3acd5d3c2f5cd082b75649f8e74388d31b42e9"},
+  "based_integers": {:hex, :based_integers, "0.1.1", "6bb53127e1789a6037bb3d238e1159cda63a7f07451c122902791b7f09e393b0", [:mix], [], "hexpm", "a2a9118501bef4f8d490d52a10bc1124eac2ae45b043be94a7398e26bb19d0a0"},
   "benchee": {:hex, :benchee, "1.5.1", "b95cbc36c4b98969a5c592a246e171041eb683c56bad1cb4f49a3b081ba66087", [:mix], [{:deep_merge, "~> 1.0", [hex: :deep_merge, repo: "hexpm", optional: false]}, {:statistex, "~> 1.1", [hex: :statistex, repo: "hexpm", optional: false]}, {:table, "~> 0.1.0", [hex: :table, repo: "hexpm", optional: true]}], "hexpm", "a539301f8dfd4efc5c5123bfb9d47ebde20092a863a5b5b16c2a60d2243dfce7"},
   "custom_base": {:hex, :custom_base, "0.2.1", "4a832a42ea0552299d81652aa0b1f775d462175293e99dfbe4d7dbaab785a706", [:mix], [], "hexpm", "8df019facc5ec9603e94f7270f1ac73ddf339f56ade76a721eaa57c1493ba463"},
   "db_connection": {:hex, :db_connection, "2.10.2", "ae391e803a5adff104da913c2fc1c0c14a37f8b10001dcef568796e1fb7bf95c", [:mix], [{:telemetry, "~> 0.4 or ~> 1.0", [hex: :telemetry, repo: "hexpm", optional: false]}], "hexpm", "510b14482330f1af6490a2fa0efd8d4f1435d1529b165647df22ac0f2df0fa93"},
