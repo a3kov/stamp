@@ -14,17 +14,19 @@ prefixed_config =
 
 Benchee.run(
   %{
-    "Generate integer stamps" => fn ->
-      for _ <- 1..1_000_000 do
-        Stamp.next_id(:myfield, integer_config)
+    "Integer stamps" => fn ->
+      for _ <- 1..1_000 do
+        Stamp.next_id(:myfield1, integer_config)
       end
     end,
-    "Generate stamps with prefix and base62 encoding" => fn ->
-      for _ <- 1..1_000_000 do
-        Stamp.next_id(:myfield, prefixed_config)
+    "Stamps with prefix and base62 encoding" => fn ->
+      for _ <- 1..1_000 do
+        Stamp.next_id(:myfield2, prefixed_config)
       end
     end,
   },
   formatters: [{Benchee.Formatters.Console, extended_statistics: true}],
-  time: 10
+  print: [configuration: false],
+  exclude_outliers: true,
+  time: 5
 )
