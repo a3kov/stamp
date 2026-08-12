@@ -9,6 +9,11 @@ defmodule Stamp do
   defguardp is_stamp(s) when is_binary(s) or (is_integer(s) and s >= 0)
   use Stamp.Ecto
 
+  @compile {:inline, [
+    unpack_time_sequence: 2,
+    pack_time_sequence: 3
+  ]}
+
   @type value :: non_neg_integer() | String.t()
 
   @type t :: %__MODULE__{
