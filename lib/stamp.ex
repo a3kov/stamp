@@ -124,7 +124,7 @@ defmodule Stamp do
 
     case :persistent_term.get(pt_key, :new_sequence) do
       :new_sequence ->
-        seq_ref = :atomics.new(1, [])
+        seq_ref = :atomics.new(1, signed: false)
         new_ts = get_time(config, opts)
         :atomics.put(seq_ref, 1, pack_time_sequence(new_ts, 0, config))
 
