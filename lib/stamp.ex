@@ -123,14 +123,11 @@ defmodule Stamp do
         try do
           :persistent_term.put_new(pt_key, seq_ref)
         rescue
-          ArgumentError -> :error
+          ArgumentError -> next_id(sequence_id, config, opts)
         else
           :ok ->
             pack_id(partition, new_ts, node, 0, config)
             |> maybe_encode_with_prefix(config)
-
-          :error ->
-            next_id(sequence_id, config, opts)
         end
 
       ref ->
