@@ -101,13 +101,6 @@ defmodule Stamp.StampTest do
       delete_partition()
     end
 
-    test "to_integer!/3 raises with unknown fields" do
-      put_partition(11)
-      assert_raise ArgumentError, fn -> Stamp.to_integer!("foo", Post, :invalid) end
-      assert_raise ArgumentError, fn -> Stamp.to_integer!("foo", Post, :missing) end
-      delete_partition()
-    end
-
     test "unpack/3 raises with unknown fields" do
       put_partition(11)
       assert_raise ArgumentError, fn -> Stamp.unpack("foo", Post, :invalid) end

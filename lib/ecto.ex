@@ -33,7 +33,7 @@ defmodule Stamp.Ecto do
         def cast("", _params), do: {:ok, nil}
 
         def cast(data, params) do
-          case to_integer(data, field_config(params)) do
+          case get_integer(data, params) do
             {:ok, _} -> {:ok, data}
             _ -> :error
           end
@@ -47,7 +47,7 @@ defmodule Stamp.Ecto do
         end
 
         def load(string, _loader, params) when is_binary(string) do
-          case to_integer(string, field_config(params)) do
+          case get_integer(string, params) do
             {:ok, _} -> {:ok, string}
             _ -> :error
           end
@@ -57,7 +57,7 @@ defmodule Stamp.Ecto do
         def dump(nil, _, _), do: {:ok, nil}
 
         def dump(string, _dumper, params) when is_binary(string) do
-          to_integer(string, field_config(params))
+          get_integer(string, params)
         end
 
         @impl true
@@ -75,24 +75,14 @@ defmodule Stamp.Ecto do
 
         def equal?(a, b, params) do
           config = field_config(params)
-          to_integer!(a, config) == to_integer!(b, config)
+          to_integer(a, config) == to_integer(b, config)
         end
 
-        @doc """
-        Converts the field value to integer. Returns `{:ok, integer_id}` or `:error` if the
-        value can't be decoded.
-
-        Arguments:
-          - `id` - stamp in integer or string form.
-
-          - `schema` - Ecto schema module.
-
-          - `field` - Ecto schema field atom.
-        """
-        @spec to_integer(value(), module(), atom()) :: {:ok, non_neg_integer()} | :error
-        def to_integer(id, schema, field) when is_atom(schema) and is_atom(field) do
-          params = get_stamp_params!(schema, field)
-          to_integer(id, field_config(params))
+        defp get_integer(value, params) do
+          config = field_config(params)
+          {:ok, to_integer(value, config)}
+        rescue
+          ArgumentError -> :error
         end
 
         @doc """
@@ -106,10 +96,10 @@ defmodule Stamp.Ecto do
 
           - `field` - Ecto schema field atom.
         """
-        @spec to_integer!(value(), module(), atom()) :: non_neg_integer() | :no_return
-        def to_integer!(id, schema, field) when is_atom(schema) and is_atom(field) do
+        @spec to_integer(value(), module(), atom()) :: non_neg_integer() | :no_return
+        def to_integer(id, schema, field) when is_atom(schema) and is_atom(field) do
           params = get_stamp_params!(schema, field)
-          to_integer!(id, field_config(params))
+          to_integer(id, field_config(params))
         end
 
         @doc """

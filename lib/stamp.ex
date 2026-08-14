@@ -9,10 +9,11 @@ defmodule Stamp do
   defguardp is_stamp(s) when is_binary(s) or (is_integer(s) and s >= 0)
   use Stamp.Ecto
 
-  @compile {:inline, [
-    unpack_time_sequence: 2,
-    pack_time_sequence: 3
-  ]}
+  @compile {:inline,
+            [
+              unpack_time_sequence: 2,
+              pack_time_sequence: 3
+            ]}
 
   @type value :: non_neg_integer() | String.t()
 
@@ -29,23 +30,6 @@ defmodule Stamp do
             sequence: nil
 
   @doc """
-  Converts the id to integer. Returns `{:ok, integer_id}` or `:error` if the
-  value can't be decoded.
-  """
-  @spec to_integer(value(), Config.t()) :: {:ok, non_neg_integer()} | :error
-  def to_integer(value, _) when is_integer(value) and value >= 0, do: {:ok, value}
-
-  def to_integer(value, %Config{codec: codec} = config) when is_binary(value) and codec != nil do
-    try do
-      maybe_remove_prefix!(value, config) |> codec.decode()
-    rescue
-      ArgumentError -> :error
-    end
-  end
-
-  def to_integer(_, _), do: :error
-
-  @doc """
   Converts the id to integer. Returns the integer id or raises if the
   value can't be decoded.
 
@@ -55,14 +39,14 @@ defmodule Stamp do
     - `config` - `Stamp.Config` structure containing parameters for
       the stamp.
   """
-  @spec to_integer!(value(), Config.t()) :: non_neg_integer() | :no_return
-  def to_integer!(id, _) when is_integer(id) and id >= 0, do: id
+  @spec to_integer(value(), Config.t()) :: non_neg_integer() | :no_return
+  def to_integer(id, _) when is_integer(id) and id >= 0, do: id
 
-  def to_integer!(id, %Config{codec: codec} = config) when is_binary(id) and codec != nil do
+  def to_integer(id, %Config{codec: codec} = config) when is_binary(id) and codec != nil do
     maybe_remove_prefix!(id, config) |> codec.decode!()
   end
 
-  def to_integer!(_, _), do: raise(ArgumentError, "Invalid value")
+  def to_integer(_, _), do: raise(ArgumentError, "Invalid value")
 
   defp maybe_remove_prefix!(string, %{prefix: nil}), do: string
 
