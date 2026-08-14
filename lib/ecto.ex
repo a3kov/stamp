@@ -42,15 +42,8 @@ defmodule Stamp.Ecto do
         @impl true
         def load(nil, _loader, _params), do: {:ok, nil}
 
-        def load(int, _loader, params) when is_integer(int) do
+        def load(int, _loader, params) do
           {:ok, maybe_encode_with_prefix(int, field_config(params))}
-        end
-
-        def load(string, _loader, params) when is_binary(string) do
-          case get_integer(string, params) do
-            {:ok, _} -> {:ok, string}
-            _ -> :error
-          end
         end
 
         @impl true
