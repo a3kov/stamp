@@ -56,7 +56,7 @@ defmodule Stamp.Ecto do
         @impl true
         def dump(nil, _, _), do: {:ok, nil}
 
-        def dump(string, _dumper, params) when is_binary(string) do
+        def dump(string, _dumper, params) do
           get_integer(string, params)
         end
 
