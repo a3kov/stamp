@@ -33,6 +33,8 @@ defmodule Stamp do
   Converts the id to integer. Returns the integer id or raises if the
   value can't be decoded.
 
+  For Ecto fields use `to_integer/3` instead.
+
   Arguments:
     - `id` - stamp in integer or string form
 
@@ -80,7 +82,8 @@ defmodule Stamp do
 
   @doc """
   Generates next id using provided sequence_id and configuration.
-  This function is for non-Ecto uses. For Ecto fields use `next_field_id/3`.
+
+  For Ecto fields use `next_field_id/3` instead.
 
   Arguments:
     - `sequence_id` - unique term used to create sequence for the stamps.
@@ -241,9 +244,9 @@ defmodule Stamp do
   end
 
   @doc """
-  Unpacks parameters stored in the id.
-  This function is for non-Ecto uses. For Ecto fields use `unpack/3`.
-  Raises `ArgumentError` on errors.
+  Unpacks parameters stored in the id. Raises `ArgumentError` on errors.
+
+  For Ecto fields use `unpack/3` instead.
 
   Arguments:
     - `id` - stamp in integer or string form (strictly according to config)
@@ -274,8 +277,9 @@ defmodule Stamp do
 
   @doc """
   Returns partition stored in the id, or nil if the stamp is not partitioned.
-  This function is for non-Ecto uses. For Ecto fields use `partition/3`.
   Raises `ArgumentError` on errors.
+
+  For Ecto fields use `partition/3` instead.
 
   Arguments:
     - `id` - stamp in integer or string form (strictly according to config)
@@ -296,9 +300,9 @@ defmodule Stamp do
   end
 
   @doc """
-  Returns UTC DateTime stored in the id.
-  This function is for non-Ecto uses. For Ecto fields use `datetime/3`.
-  Raises `ArgumentError` on errors.
+  Returns UTC DateTime stored in the id. Raises `ArgumentError` on errors.
+
+  For Ecto fields use `datetime/3` instead.
 
   Arguments:
     - `id` - stamp in integer or string form (strictly according to config)
