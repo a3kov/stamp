@@ -5,6 +5,8 @@
  - Breaking change: remove to_integer!/3 and to_integer!/2 and make non-bang
    versions raise instead in line with Elixir conventions.
 
+ - Add migration tools for partitioning by stamp range in Postgres
+
 ## v0.1.2 (2026-08-11)
 
 Use bitwise operation for better performance.

@@ -3,6 +3,8 @@ defmodule Stamp.Config do
   Configuration structure for Stamp. Each stamp is generated and later
   processed according to the configuration parameters.
   """
+  import Bitwise
+
   @distribute_bits 63
   @default_partition_bits 0
   @default_time_bits 41
@@ -191,5 +193,14 @@ defmodule Stamp.Config do
     function_exported?(module, :encode, 1) &&
       function_exported?(module, :decode, 1) &&
       function_exported?(module, :decode!, 1)
+  end
+
+  @doc """
+  Returns value range for the partition in the form of {start, end} tuple.
+  The range is end-exclusive i.e. the last number in the partition is `end - 1`.
+  """
+  def partition_range(partition_number, partition_bits) do
+    data_bits = 63 - partition_bits
+    {partition_number <<< data_bits, (partition_number + 1) <<< data_bits}
   end
 end

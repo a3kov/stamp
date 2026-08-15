@@ -144,5 +144,14 @@ defmodule Stamp.StampConfigTest do
                      Config.new(codec: :nonexisting, node_fun: &node_num/0)
                    end
     end
+
+    test "Config.partitions/1 returns correct list of partitions" do
+      assert [
+               {0, 2_305_843_009_213_693_952},
+               {2_305_843_009_213_693_952, 4_611_686_018_427_387_904},
+               {4_611_686_018_427_387_904, 6_917_529_027_641_081_856},
+               {6_917_529_027_641_081_856, 9_223_372_036_854_775_808}
+             ] = Config.partitions(2)
+    end
   end
 end
