@@ -53,15 +53,16 @@ defmodule Stamp.Migration do
   """
   defmacro pg_create_partition(table, partition, partition_bits, start_pnum, end_pnum, opts \\ []) do
     quote bind_quoted: [
-      table: table,
-      partition: partition,
-      partition_bits: partition_bits,
-      start_pnum: start_pnum,
-      end_pnum: end_pnum,
-      opts: opts
-    ] do
+            table: table,
+            partition: partition,
+            partition_bits: partition_bits,
+            start_pnum: start_pnum,
+            end_pnum: end_pnum,
+            opts: opts
+          ] do
       options = Keyword.get(opts, :options, "")
       {p_start, _} = Config.partition_range(start_pnum, partition_bits)
+
       p_end =
         if end_pnum == 2 ** partition_bits - 1 do
           "MAXVALUE"
