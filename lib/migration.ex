@@ -49,7 +49,7 @@ defmodule Stamp.Migration do
 
   Options:
     - `options` - custom options that will be appended after the generated statement,
-      similar to `Ecto.Migration.table/2` `:options`. Fpr example: `TABLESPACE mytablespace`
+      similar to `Ecto.Migration.table/2` `:options`. For example: `TABLESPACE mytablespace`
   """
   defmacro pg_create_partition(table, partition, partition_bits, start_pnum, end_pnum, opts \\ []) do
     quote bind_quoted: [
